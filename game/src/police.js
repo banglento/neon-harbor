@@ -189,7 +189,7 @@ export function createPolice(ctx) {
       state.timeSinceSeen = seen ? 0 : state.timeSinceSeen + dt;
 
       // ---- heat decay while hidden.
-      if (state.level > 0 && !seen && state.timeSinceSeen > WANTED.decayDelay) {
+      if (state.heat > 0 && !seen && state.timeSinceSeen > WANTED.decayDelay) {
         const before = state.level;
         state.heat = clamp(state.heat - WANTED.decayRate * dt, 0, WANTED.heatMax);
         applyLevel(police, ctx, before, 'decay', true);

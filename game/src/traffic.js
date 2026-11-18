@@ -432,7 +432,8 @@ function recycleTraffic(traffic, ctx, playerPos) {
 
   // Top the population back up around the player.
   let guard = 0;
-  while (traffic.cars.length < TRAFFIC.count && guard < 8) {
+  const deficit = TRAFFIC.count - traffic.cars.length;
+  while (traffic.cars.length < TRAFFIC.count && guard < 8 + deficit) {
     guard += 1;
     const node = network.nearestNodeIndex(playerPos.x, playerPos.z);
     const ix = clamp(node.ix + randInt(Math.random, -3, 3), 0, network.nodeCount.x - 1);
