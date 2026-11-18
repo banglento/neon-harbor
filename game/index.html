@@ -1,57 +1,799 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<meta name="theme-color" content="#102b37">
-<link rel="icon" href="data:,">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Neon Harbor — Solmar Bay</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2316202b'/%3E%3Cpath d='M6 21h20M9 21v-5h4l3-4h6l4 4v5' stroke='%23ffcf5c' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+<meta name="description" content="Neon Harbor: an original open-world crime game set in Solmar Bay. Runs offline on three.js." />
 <style>
-  :root{color-scheme:dark;--ink:#f6f0dc;--muted:#b6c5c5;--aqua:#63e1cf;--gold:#ffd27a;--glass:rgba(9,27,37,.78);--line:rgba(228,247,236,.22)}
-  *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#75c9dd;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-  button{font:inherit;color:inherit}#world{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
-  .hud{position:fixed;inset:0;pointer-events:none;user-select:none;text-shadow:0 2px 12px #10252c}
-  .topbar{position:absolute;left:24px;right:24px;top:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
-  .brand{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#d3f1e8;font-weight:800}.money{font-size:27px;font-weight:850;letter-spacing:.02em;margin-top:4px}.money small{font-size:13px;color:var(--gold);vertical-align:4px;margin-right:5px}
-  .condition{width:188px;margin-top:7px}.condition-label{font-size:10px;letter-spacing:.17em;font-weight:800;color:#e6eeee;margin-bottom:6px}.condition-track{height:8px;border:1px solid #e6eee8a6;background:#152e3980;border-radius:8px;overflow:hidden}.condition-fill{height:100%;width:100%;background:linear-gradient(90deg,#61d6a4,#e3dd89);border-radius:8px;transition:width .15s}
-  .wanted{display:flex;justify-content:flex-end;gap:5px;font-size:24px;color:#ffffff50;line-height:1}.wanted .active{color:#ffc763;text-shadow:0 0 12px #ffad37}
-  .objective{position:absolute;left:50%;top:26px;transform:translateX(-50%);max-width:min(44vw,560px);padding:11px 20px 12px;text-align:center;border:1px solid var(--line);border-radius:12px;background:var(--glass);backdrop-filter:blur(8px)}
-  .objective-label{font-size:9px;letter-spacing:.22em;color:var(--aqua);font-weight:900;text-transform:uppercase}.objective-text{font-size:15px;font-weight:700;margin-top:3px;line-height:1.35}
-  .bottom-left{position:absolute;left:24px;bottom:22px;display:flex;align-items:flex-end;gap:14px}.minimap-wrap{width:176px;height:176px;padding:5px;border:1px solid #e8f5e66b;border-radius:14px;background:#10242dc9;box-shadow:0 8px 32px #10242d45}.minimap-wrap canvas{width:100%;height:100%;display:block;border-radius:10px}.location{padding:0 0 6px;font-weight:850;font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:#e8f4e8}.location small{display:block;color:var(--aqua);font-size:9px;letter-spacing:.22em;margin-bottom:6px}
-  .controls{position:absolute;right:24px;bottom:24px;text-align:right;color:#fff;font-size:11px;line-height:1.9}.key{display:inline-block;min-width:22px;padding:1px 5px;border:1px solid #f2f4e588;border-radius:5px;background:#142e38a6;text-align:center;font-size:10px;font-weight:800}
-  .toast{position:absolute;left:50%;top:31%;transform:translate(-50%,-50%);padding:12px 20px;border-radius:10px;background:var(--glass);border:1px solid var(--line);font-weight:800;opacity:0;transition:opacity .2s}.toast.show{opacity:1}
-  .overlay{position:fixed;inset:0;z-index:5;display:grid;place-items:center;padding:24px;background:linear-gradient(90deg,rgba(9,28,40,.65),rgba(9,28,40,.13) 74%),linear-gradient(0deg,rgba(8,26,36,.28),transparent 60%);backdrop-filter:blur(2px)}.overlay[hidden]{display:none}
-  .panel{width:min(600px,94vw);padding:clamp(25px,5vw,52px);border:1px solid #d4f4e34b;border-radius:19px;background:linear-gradient(140deg,rgba(13,41,50,.94),rgba(17,39,46,.88));box-shadow:0 28px 90px #061c2766;backdrop-filter:blur(16px)}
-  .eyebrow{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--aqua);font-weight:900}.title{font-size:clamp(43px,8vw,74px);line-height:.93;letter-spacing:-.065em;margin:12px 0 18px;font-weight:950}.title span{color:var(--gold)}.subtitle{font-size:14px;line-height:1.7;color:#d1dfd9;max-width:475px}.story{margin-top:21px;padding:15px 17px;border-left:2px solid var(--gold);background:#ffffff08;font-size:13px;line-height:1.6;color:#e5e8dc}.actions{display:flex;flex-wrap:wrap;gap:11px;margin-top:24px}.action{border:1px solid #8cf0dc77;border-radius:9px;background:linear-gradient(135deg,#48cdb7,#50b7a7);color:#0c2b31;padding:12px 20px;min-width:148px;font-size:13px;font-weight:900;letter-spacing:.03em;cursor:pointer;box-shadow:0 7px 20px #43cbb633;transition:transform .15s,filter .15s}.action:hover{transform:translateY(-2px);filter:brightness(1.1)}.action.secondary{background:#d8e7de0c;color:var(--ink);border-color:#e9f0db4d;box-shadow:none}.action:disabled{opacity:.4;cursor:not-allowed;transform:none}.hint{font-size:10px;color:#a7bfbd;margin-top:19px;letter-spacing:.04em}
-  .compact{width:min(470px,94vw);text-align:center}.compact .title{font-size:clamp(36px,7vw,58px);margin-top:8px}.compact .actions{justify-content:center}.compact .subtitle{margin-inline:auto}
-  @media(max-width:700px){.topbar{left:13px;right:13px;top:13px}.money{font-size:21px}.condition{width:120px}.objective{top:auto;bottom:205px;max-width:80vw;padding:9px 12px}.objective-text{font-size:12px}.bottom-left{left:13px;bottom:13px;gap:8px}.minimap-wrap{width:132px;height:132px}.controls{right:13px;bottom:13px;font-size:9px}.location{display:none}.wanted{font-size:20px}.overlay{padding:12px}}
-  @media(max-height:520px){.minimap-wrap{width:112px;height:112px}.objective{top:85px}.panel{padding:20px 25px}.story{margin-top:12px}.actions{margin-top:14px}.hint{margin-top:10px}}
+  :root {
+    --sun: #ffd98f;
+    --sun-deep: #ff9d5c;
+    --ink: #10161f;
+    --ink-soft: #1b2532;
+    --cream: #fff4e0;
+    --teal: #2fb5c4;
+    --coral: #ff6f61;
+    --gold: #ffcf5c;
+    --wanted: #ffd166;
+    --hud-font: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #1a2430;
+    color: var(--cream);
+    font-family: var(--hud-font);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    cursor: default;
+  }
+
+  #app { position: fixed; inset: 0; }
+  canvas#scene { display: block; width: 100%; height: 100%; outline: none; }
+
+  /* ------------------------------------------------------------ HUD frame */
+  #hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 320ms ease;
+  }
+  #hud.visible { opacity: 1; }
+
+  .panel {
+    background: linear-gradient(160deg, rgba(16, 22, 31, 0.78), rgba(16, 22, 31, 0.58));
+    border: 1px solid rgba(255, 214, 143, 0.22);
+    border-radius: 12px;
+    box-shadow: 0 10px 28px rgba(6, 12, 18, 0.35);
+    backdrop-filter: blur(6px);
+  }
+
+  /* top-right: cash, wanted, condition */
+  #status {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 268px;
+    padding: 14px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  #cash-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  #cash {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #c9f5b0;
+    text-shadow: 0 2px 10px rgba(80, 220, 130, 0.35);
+    font-variant-numeric: tabular-nums;
+  }
+  #cash-label, .tiny-label {
+    font-size: 10px;
+    letter-spacing: 2.2px;
+    text-transform: uppercase;
+    color: rgba(255, 244, 224, 0.55);
+  }
+  #respect-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: rgba(255, 244, 224, 0.8);
+  }
+  #respect-bar {
+    flex: 1;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+  }
+  #respect-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--teal), #7fe3c6);
+    transition: width 260ms ease;
+  }
+
+  #wanted {
+    display: flex;
+    gap: 3px;
+    font-size: 22px;
+    line-height: 1;
+    filter: drop-shadow(0 0 6px rgba(255, 209, 102, 0.25));
+  }
+  #wanted span {
+    color: rgba(255, 255, 255, 0.16);
+    transition: color 160ms ease, transform 160ms ease;
+  }
+  #wanted span.on { color: var(--wanted); transform: scale(1.06); }
+  #wanted.flash span.on { animation: starFlash 620ms ease-in-out infinite alternate; }
+  @keyframes starFlash {
+    from { color: #ffe6a8; text-shadow: 0 0 4px rgba(255, 210, 110, 0.4); }
+    to { color: #ff7b5c; text-shadow: 0 0 14px rgba(255, 120, 90, 0.75); }
+  }
+
+  #condition-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #condition-label { font-size: 10px; letter-spacing: 2px; color: rgba(255, 244, 224, 0.55); }
+  #condition-bar {
+    flex: 1;
+    height: 7px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+  }
+  #condition-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #7be07f, #c9f5b0);
+    transition: width 180ms ease, background 240ms ease;
+  }
+  #condition-fill.hurt { background: linear-gradient(90deg, #ffb347, #ffd98f); }
+  #condition-fill.bad { background: linear-gradient(90deg, #ff5f4a, #ff9a7a); }
+
+  /* top-left: objective + clock */
+  #objective-box {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    max-width: 380px;
+    padding: 12px 16px 14px;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 240ms ease, transform 240ms ease;
+  }
+  #objective-box.show { opacity: 1; transform: translateY(0); }
+  #objective-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+  #objective-tag {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--sun);
+    background: rgba(255, 210, 130, 0.12);
+    border: 1px solid rgba(255, 210, 130, 0.28);
+    padding: 2px 7px;
+    border-radius: 5px;
+  }
+  #objective-timer {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: #ffd9a8;
+  }
+  #objective-timer.urgent { color: #ff8a6a; animation: starFlash 500ms infinite alternate; }
+  #objective-text {
+    font-size: 15px;
+    line-height: 1.35;
+    color: var(--cream);
+  }
+  #objective-sub {
+    margin-top: 4px;
+    font-size: 12px;
+    color: rgba(255, 244, 224, 0.6);
+  }
+
+  /* bottom-right: minimap */
+  #minimap-wrap {
+    position: absolute;
+    right: 18px;
+    bottom: 18px;
+    padding: 8px;
+    border-radius: 14px;
+  }
+  #minimap {
+    display: block;
+    width: 190px;
+    height: 190px;
+    border-radius: 9px;
+    background: #16202b;
+  }
+  #minimap-label {
+    position: absolute;
+    left: 16px;
+    bottom: 14px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: rgba(255, 244, 224, 0.5);
+  }
+  #district {
+    position: absolute;
+    top: -18px;
+    left: 0;
+    font-size: 10px;
+    letter-spacing: 2.4px;
+    text-transform: uppercase;
+    color: rgba(255, 244, 224, 0.7);
+  }
+
+  /* bottom-left: speed + vehicle */
+  #vehicle-hud {
+    position: absolute;
+    left: 18px;
+    bottom: 18px;
+    width: 210px;
+    padding: 12px 14px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 200ms ease, transform 200ms ease;
+  }
+  #vehicle-hud.show { opacity: 1; transform: translateY(0); }
+  #vehicle-name {
+    font-size: 13px;
+    letter-spacing: 0.6px;
+    color: var(--cream);
+  }
+  #speed-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  #speed {
+    font-size: 30px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--sun);
+  }
+  #speed-unit { font-size: 10px; letter-spacing: 2px; color: rgba(255, 244, 224, 0.55); }
+  #car-health {
+    margin-top: 6px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+  }
+  #car-health-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, var(--teal), #8fe6ef);
+    transition: width 200ms ease;
+  }
+
+  /* centre prompts + toasts */
+  #prompt {
+    position: absolute;
+    left: 50%;
+    bottom: 15%;
+    transform: translate(-50%, 8px);
+    padding: 9px 18px;
+    border-radius: 30px;
+    font-size: 13px;
+    letter-spacing: 0.4px;
+    opacity: 0;
+    transition: opacity 180ms ease, transform 180ms ease;
+    white-space: nowrap;
+  }
+  #prompt.show { opacity: 1; transform: translate(-50%, 0); }
+  #prompt kbd {
+    display: inline-block;
+    min-width: 20px;
+    padding: 1px 6px;
+    margin: 0 3px;
+    border-radius: 4px;
+    background: rgba(255, 214, 143, 0.9);
+    color: #20262e;
+    font-family: var(--hud-font);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  #toasts {
+    position: absolute;
+    left: 50%;
+    top: 96px;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .toast {
+    padding: 8px 18px;
+    border-radius: 24px;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    background: rgba(16, 22, 31, 0.82);
+    border: 1px solid rgba(255, 214, 143, 0.28);
+    color: var(--cream);
+    animation: toastIn 260ms ease both;
+  }
+  .toast.good { border-color: rgba(130, 235, 160, 0.5); color: #cbffd8; }
+  .toast.bad { border-color: rgba(255, 120, 100, 0.55); color: #ffd0c6; }
+  .toast.gold { border-color: rgba(255, 209, 120, 0.6); color: #ffe9b8; }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  #crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 50%;
+    background: rgba(255, 244, 224, 0.55);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  #crosshair.show { opacity: 1; }
+
+  /* ---------------------------------------------------------- overlays */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 30;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 260ms ease;
+  }
+  .overlay.visible { opacity: 1; pointer-events: auto; }
+
+  #start-screen {
+    background:
+      radial-gradient(120% 90% at 78% 12%, rgba(255, 190, 110, 0.38), transparent 62%),
+      linear-gradient(165deg, rgba(10, 18, 26, 0.72), rgba(10, 16, 24, 0.9));
+    backdrop-filter: blur(2px);
+  }
+
+  .start-card {
+    width: min(760px, 100%);
+    padding: 34px 38px 30px;
+    border-radius: 18px;
+    background: linear-gradient(158deg, rgba(22, 30, 41, 0.94), rgba(14, 20, 28, 0.92));
+    border: 1px solid rgba(255, 214, 143, 0.26);
+    box-shadow: 0 30px 80px rgba(4, 8, 12, 0.6), inset 0 1px 0 rgba(255, 235, 200, 0.08);
+  }
+  .brand-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 10px;
+    letter-spacing: 3.4px;
+    text-transform: uppercase;
+    color: rgba(255, 214, 143, 0.75);
+  }
+  .brand-line .rule { flex: 1; height: 1px; background: linear-gradient(90deg, rgba(255, 214, 143, 0.4), transparent); }
+
+  h1.title {
+    margin: 14px 0 2px;
+    font-size: clamp(40px, 7vw, 66px);
+    line-height: 0.95;
+    letter-spacing: -1.5px;
+    font-weight: 800;
+    background: linear-gradient(96deg, #fff3d6 8%, #ffce7d 46%, #ff8f63 88%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 40px rgba(255, 170, 90, 0.25);
+  }
+  .subtitle {
+    font-size: 13px;
+    letter-spacing: 3.6px;
+    text-transform: uppercase;
+    color: rgba(255, 244, 224, 0.58);
+    margin-bottom: 20px;
+  }
+
+  #story {
+    font-size: 14.5px;
+    line-height: 1.62;
+    color: rgba(255, 244, 224, 0.86);
+    margin: 0 0 16px;
+    max-width: 60ch;
+  }
+  #story em { color: var(--sun); font-style: normal; font-weight: 600; }
+
+  .menu-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 22px;
+    align-items: center;
+  }
+  button.btn {
+    pointer-events: auto;
+    font-family: var(--hud-font);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+    padding: 13px 26px;
+    border-radius: 9px;
+    border: 1px solid rgba(255, 214, 143, 0.4);
+    background: transparent;
+    color: var(--cream);
+    cursor: pointer;
+    transition: transform 120ms ease, background 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  }
+  button.btn:hover { background: rgba(255, 214, 143, 0.1); border-color: rgba(255, 214, 143, 0.7); }
+  button.btn:active { transform: translateY(1px) scale(0.995); }
+  button.btn.primary {
+    background: linear-gradient(120deg, #ffd07a, #ff9f63);
+    border-color: transparent;
+    color: #2a1c10;
+    box-shadow: 0 8px 24px rgba(255, 150, 80, 0.3);
+  }
+  button.btn.primary:hover { box-shadow: 0 10px 30px rgba(255, 150, 80, 0.45); }
+  button.btn[disabled] {
+    opacity: 0.34;
+    cursor: default;
+    box-shadow: none;
+    background: transparent;
+    color: var(--cream);
+    border-color: rgba(255, 214, 143, 0.2);
+  }
+  button.btn.small { padding: 9px 16px; font-size: 11.5px; letter-spacing: 1.6px; }
+
+  #save-info {
+    font-size: 11.5px;
+    letter-spacing: 0.6px;
+    color: rgba(255, 244, 224, 0.5);
+    margin-left: 4px;
+  }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px 20px;
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(255, 244, 224, 0.1);
+    font-size: 12px;
+    color: rgba(255, 244, 224, 0.66);
+  }
+  .controls-grid div { display: flex; justify-content: space-between; gap: 10px; }
+  .controls-grid b {
+    color: rgba(255, 244, 224, 0.92);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  #loading-note {
+    margin-top: 14px;
+    font-size: 11px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: rgba(255, 244, 224, 0.4);
+  }
+
+  /* pause */
+  #pause-screen { background: rgba(8, 13, 19, 0.72); backdrop-filter: blur(4px); }
+  .pause-card {
+    width: min(430px, 100%);
+    padding: 28px 30px;
+    text-align: center;
+    border-radius: 16px;
+    background: linear-gradient(160deg, rgba(24, 32, 44, 0.96), rgba(14, 20, 28, 0.94));
+    border: 1px solid rgba(255, 214, 143, 0.24);
+    box-shadow: 0 24px 60px rgba(4, 8, 12, 0.6);
+  }
+  .pause-card h2 {
+    margin: 0 0 4px;
+    font-size: 26px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--sun);
+    font-weight: 700;
+  }
+  .pause-card p { margin: 0 0 20px; font-size: 12.5px; color: rgba(255, 244, 224, 0.6); letter-spacing: 0.6px; }
+  .pause-card .menu-row { justify-content: center; margin-top: 0; }
+
+  /* busted / mission / story complete */
+  #busted-screen { background: radial-gradient(circle at 50% 45%, rgba(120, 20, 16, 0.45), rgba(8, 10, 14, 0.88)); }
+  #busted-screen h2, .big-card h2 {
+    font-size: clamp(36px, 7vw, 62px);
+    margin: 0;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    font-weight: 800;
+    color: #ff8a72;
+    text-shadow: 0 0 40px rgba(255, 90, 60, 0.45);
+  }
+  .big-card {
+    text-align: center;
+    padding: 30px;
+    max-width: 620px;
+  }
+  .big-card p { margin: 12px 0 0; font-size: 14px; color: rgba(255, 244, 224, 0.75); line-height: 1.6; }
+  .big-card .fine { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #ffb199; margin-top: 10px; }
+
+  #complete-screen { background: radial-gradient(circle at 50% 40%, rgba(40, 120, 110, 0.4), rgba(8, 12, 16, 0.9)); }
+  #complete-screen h2 {
+    font-size: clamp(30px, 6vw, 54px);
+    margin: 0;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 800;
+    background: linear-gradient(96deg, #fff3d6, #ffce7d 50%, #7fe3c6);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  #complete-stats {
+    display: flex;
+    justify-content: center;
+    gap: 26px;
+    margin-top: 20px;
+    font-size: 12px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: rgba(255, 244, 224, 0.65);
+  }
+  #complete-stats b { display: block; font-size: 24px; letter-spacing: 0; color: var(--sun); margin-bottom: 2px; }
+
+  #mission-banner {
+    position: fixed;
+    left: 50%;
+    top: 40%;
+    transform: translate(-50%, -50%) scale(0.96);
+    text-align: center;
+    z-index: 24;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 420ms ease, transform 520ms cubic-bezier(.2,.8,.2,1);
+  }
+  #mission-banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #mission-banner .kicker {
+    font-size: 11px;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    color: rgba(255, 214, 143, 0.8);
+    margin-bottom: 6px;
+  }
+  #mission-banner .name {
+    font-size: clamp(30px, 5vw, 52px);
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: #fff6e4;
+    text-shadow: 0 6px 40px rgba(255, 150, 70, 0.4);
+  }
+  #mission-banner .rule {
+    width: 120px;
+    height: 2px;
+    margin: 12px auto 0;
+    background: linear-gradient(90deg, transparent, var(--sun), transparent);
+  }
+
+  #flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 20;
+    background: #ff3b30;
+    opacity: 0;
+    transition: opacity 220ms ease;
+  }
+
+  #boot-error {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+    z-index: 90;
+    background: #12181f;
+    color: #ffb199;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 720px) {
+    #status { width: 210px; padding: 10px 12px; }
+    #cash { font-size: 22px; }
+    #minimap { width: 138px; height: 138px; }
+    #objective-box { max-width: 62vw; }
+    .start-card { padding: 24px; }
+    .controls-grid { display: none; }
+  }
 </style>
-<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
 </head>
 <body>
-<canvas id="world" aria-label="Neon Harbor: explore Solmar Bay on foot and by car"></canvas>
-<div id="hud" class="hud" hidden>
-  <div class="topbar"><div><div class="brand">SOLMAR BAY · COASTAL DISTRICT</div><div class="money"><small>$</small><span id="cash">0</span></div></div>
-    <div id="objective" class="objective"><div id="objective-label" class="objective-label">Current job</div><div id="objective-text" class="objective-text">Find your next lead</div></div>
-    <div><div class="condition-label">CONDITION</div><div class="condition"><div class="condition-track"><div id="condition-fill" class="condition-fill"></div></div></div><div id="wanted" class="wanted" aria-label="Wanted level"></div></div>
+<div id="app"><canvas id="scene" tabindex="0"></canvas></div>
+
+<div id="hud">
+  <div id="objective-box" class="panel">
+    <div id="objective-header">
+      <span id="objective-tag">Mission</span>
+      <span id="objective-timer" class="hidden">0:00</span>
+    </div>
+    <div id="objective-text">Explore Solmar Bay.</div>
+    <div id="objective-sub"></div>
   </div>
-  <div class="bottom-left"><div class="minimap-wrap"><canvas id="minimap" width="256" height="256" aria-label="City minimap"></canvas></div><div class="location"><small>NEON HARBOR</small><span id="respect">NO WAKE</span></div></div>
-  <div id="controls" class="controls"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> move / drive<br><span class="key">SHIFT</span> sprint &nbsp; <span class="key">E</span> enter / exit<br><span class="key">F</span> shove &nbsp; <span class="key">P</span> pause &nbsp; <span class="key">M</span> mute</div>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="status" class="panel">
+    <div>
+      <div class="tiny-label">Cash</div>
+      <div id="cash-row"><div id="cash">$0</div></div>
+    </div>
+    <div id="respect-row">
+      <span class="tiny-label">Respect</span>
+      <div id="respect-bar"><div id="respect-fill"></div></div>
+      <span id="respect-value">0</span>
+    </div>
+    <div id="wanted" aria-label="Wanted level">
+      <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+    </div>
+    <div id="condition-row">
+      <span id="condition-label">Condition</span>
+      <div id="condition-bar"><div id="condition-fill"></div></div>
+    </div>
+  </div>
+
+  <div id="minimap-wrap" class="panel">
+    <div id="district">Solmar Bay</div>
+    <canvas id="minimap" width="380" height="380"></canvas>
+    <div id="minimap-label">N</div>
+  </div>
+
+  <div id="vehicle-hud" class="panel">
+    <div id="vehicle-name">—</div>
+    <div id="speed-row"><div id="speed">0</div><div id="speed-unit">KM/H</div></div>
+    <div id="car-health"><div id="car-health-fill"></div></div>
+  </div>
+
+  <div id="toasts"></div>
+  <div id="prompt" class="panel"></div>
+  <div id="crosshair"></div>
 </div>
-<section id="start-screen" class="overlay" aria-label="Neon Harbor title screen">
-  <div class="panel"><div class="eyebrow">A Solmar Bay story</div><h1 class="title">NEON<br><span>HARBOR</span></h1>
-    <div class="subtitle">The sun is warm. The water is calm. The city keeps its own kind of time.</div>
-    <div class="story"><strong>Mara Velez</strong> knows every shortcut in Solmar Bay. One last courier job should buy her a clean start — if she can keep the package, the cops and the past from catching up.</div>
-    <div class="actions"><button id="new-game" class="action">NEW GAME</button><button id="continue-game" class="action secondary" disabled>CONTINUE</button></div>
-    <div class="hint">WASD move · Mouse drag look · Shift run · E enter/exit · F shove · P pause</div>
+
+<div id="mission-banner">
+  <div class="kicker">Mission</div>
+  <div class="name">Cold Package</div>
+  <div class="rule"></div>
+</div>
+
+<div id="flash"></div>
+
+<!-- ------------------------------------------------------------ start -->
+<div id="start-screen" class="overlay visible">
+  <div class="start-card">
+    <div class="brand-line">
+      <span>Solmar Bay · 4:12 PM</span>
+      <span class="rule"></span>
+      <span>An original open-world crime story</span>
+    </div>
+    <h1 class="title">Neon Harbor</h1>
+    <div class="subtitle">Last light on the coast</div>
+
+    <p id="story">
+      Mara Velez runs packages across Solmar Bay on a bike that is older than she is.
+      She knows every alley from the marina to the ridge, and she has spent four years
+      staying invisible — no names, no receipts, no friends in the wrong rooms.
+      That ends on a Tuesday, when an old debt walks into her favourite diner and slides
+      a sealed crate across the table. <em>Three deliveries,</em> it says. <em>Then we're square.</em>
+      The crate is cold. The police scanner is already busy. And somewhere past the pier,
+      the lighthouse is coming on for the night.
+    </p>
+
+    <div class="menu-row">
+      <button id="btn-new" class="btn primary" type="button">New Game</button>
+      <button id="btn-continue" class="btn" type="button" disabled>Continue</button>
+      <button id="btn-help" class="btn small" type="button">Controls</button>
+      <span id="save-info">No save yet</span>
+    </div>
+
+    <div class="controls-grid">
+      <div><b>W A S D</b><span>Move / drive</span></div>
+      <div><b>Mouse drag</b><span>Orbit camera</span></div>
+      <div><b>Shift</b><span>Sprint</span></div>
+      <div><b>E</b><span>Enter / exit car</span></div>
+      <div><b>F · Click</b><span>Punch</span></div>
+      <div><b>Space</b><span>Handbrake</span></div>
+      <div><b>Esc · P</b><span>Pause</span></div>
+      <div><b>M</b><span>Mute</span></div>
+      <div><b>H</b><span>Horn</span></div>
+    </div>
+    <div id="loading-note">Click New Game to enter the city</div>
   </div>
-</section>
-<section id="pause-screen" class="overlay" hidden><div class="panel compact"><div class="eyebrow">Take a breath</div><h2 class="title">PAUSED</h2><div class="subtitle">Solmar Bay will still be here when you're ready.</div><div class="actions"><button id="resume-game" class="action">BACK TO THE BAY</button><button id="pause-new-game" class="action secondary">NEW GAME</button></div></div></section>
-<section id="busted-screen" class="overlay" hidden><div class="panel compact"><div class="eyebrow">Solmar Bay Police</div><h2 class="title">BUSTED</h2><div id="busted-copy" class="subtitle">You lost some cash, but you still have a way out.</div><div class="actions"><button id="busted-continue" class="action">GET BACK OUT THERE</button></div></div></section>
-<section id="complete-screen" class="overlay" hidden><div class="panel compact"><div class="eyebrow">The Solmar Bay story</div><h2 class="title">CLEAN<br><span>HORIZON</span></h2><div class="subtitle">Mara has her way out. The harbor lights fade behind her.</div><div class="actions"><button id="complete-continue" class="action">KEEP EXPLORING</button></div></div></section>
-<section id="briefing-screen" class="overlay" hidden><div class="panel compact"><div class="eyebrow">Incoming job</div><h2 id="briefing-title" class="title">THE LAST RUN</h2><div id="briefing-copy" class="subtitle"></div><div class="actions"><button id="briefing-continue" class="action">LET'S MOVE</button></div></div></section>
+</div>
+
+<!-- ------------------------------------------------------------ pause -->
+<div id="pause-screen" class="overlay">
+  <div class="pause-card">
+    <h2>Paused</h2>
+    <p>Solmar Bay keeps its own time.</p>
+    <div class="menu-row">
+      <button id="btn-resume" class="btn primary" type="button">Resume</button>
+      <button id="btn-save" class="btn" type="button">Save</button>
+      <button id="btn-restart" class="btn" type="button">Restart</button>
+    </div>
+    <div class="menu-row" style="margin-top:14px">
+      <button id="btn-mute" class="btn small" type="button">Sound: On</button>
+      <button id="btn-quit" class="btn small" type="button">Quit to title</button>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------ busted -->
+<div id="busted-screen" class="overlay">
+  <div class="big-card">
+    <h2>Busted</h2>
+    <p id="busted-text">The SBPD had the block closed before you cleared the lights.</p>
+    <div class="fine" id="busted-fine">Fine $250</div>
+    <div class="menu-row" style="justify-content:center">
+      <button id="btn-busted-continue" class="btn primary" type="button">Walk It Off</button>
+    </div>
+  </div>
+</div>
+
+<!-- -------------------------------------------------------- story end -->
+<div id="complete-screen" class="overlay">
+  <div class="big-card">
+    <h2>Story Complete</h2>
+    <p>
+      The crate is on the boat, the harbour lights are behind you, and for the first
+      time in four years nobody is looking for Mara Velez. Solmar Bay will find
+      another courier by morning — but tonight the city belongs to her.
+    </p>
+    <div id="complete-stats">
+      <div><b id="complete-cash">$0</b>Cash</div>
+      <div><b id="complete-respect">0</b>Respect</div>
+      <div><b id="complete-time">0:00</b>On the clock</div>
+    </div>
+    <div class="menu-row" style="justify-content:center">
+      <button id="btn-free-roam" class="btn primary" type="button">Keep Driving</button>
+      <button id="btn-credits" class="btn" type="button">Title Screen</button>
+    </div>
+  </div>
+</div>
+
+<div id="boot-error"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js"
+  }
+}
+</script>
+<script>
+  // Boot guard: if the module graph fails (file:// with modules blocked, a
+  // missing file), say so instead of showing a black screen.
+  window.addEventListener('error', function (event) {
+    if (!event || !event.message) return;
+    var box = document.getElementById('boot-error');
+    if (!box) return;
+    box.style.display = 'flex';
+    box.textContent =
+      'Neon Harbor could not start.\n\n' +
+      event.message +
+      '\n\nServe the game/ folder over HTTP (node serve.ts, then http://localhost:8080).';
+  });
+</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

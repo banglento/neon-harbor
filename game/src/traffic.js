@@ -1,193 +1,461 @@
-// Populate Solmar Bay with lane-following traffic and enterable parked cars.
-import { CITY } from './config.js';
-import { choose, clamp, createRng, randomRange } from './util.js';
+// traffic.js — AI drivers on the road grid and the parked cars you can steal.
+//
+//   const traffic = createTraffic(ctx);      // registers ctx.traffic
+//   traffic.update(dt, player);              // drives every AI car, recycles distant ones
+//   traffic.spawnParked(24);                 // fills kerbside bays with stealable cars
+//
+// Every car here is a vehicles.js car, so the player steals one by walking up
+// and pressing E — main.js calls ctx.vehicles.findEnterable() and sets
+// car.occupiedBy / car.role itself. Traffic never touches a car that is
+// occupied or that another module has claimed.
+//
+// traffic = {
+//   root, cars, parkedCars, update(dt, player), spawnParked(count),
+//   spawnTrafficCar(ix, iz), respawnNear(player), stats(),
+//   registerHooks({ onHorn })
+// }
+//
+// Each AI car carries car.ai = { ix, iz, tx, tz, cruise, wait, stuck, lastHorn, ... }
 
-const LANE_OFFSET = 1.65;
-const MOVING_MODELS = ['tide', 'cielo', 'marina', 'lumen', 'dorado'];
-const PARKED_MODELS = ['tide', 'marina', 'dorado', 'lumen'];
+import * as THREE from 'three';
+import { TRAFFIC, CITY } from './config.js';
+import { laneTarget } from './vehicles.js';
+import {
+  mulberry32,
+  rand,
+  randInt,
+  pick,
+  clamp,
+  lerp,
+  angleDelta,
+  dist2D,
+  distSq2D,
+  TAU,
+} from './util.js';
 
-function lanePosition(axis, coordinate, direction, along) {
-  if (axis === 'z') return { x: coordinate + (direction > 0 ? -LANE_OFFSET : LANE_OFFSET), z: along };
-  return { x: along, z: coordinate + (direction > 0 ? -LANE_OFFSET : LANE_OFFSET) };
-}
+const AI = {
+  arriveRadius: 4.2,
+  cruiseMin: 8.5,
+  cruiseMax: 12.5,
+  stopGap: 2.2,
+  avoidLateral: 2.6,
+  stuckTime: 5.5,
+  turnLookahead: 12,
+  spawnClearance: 8,
+  recycleCheck: 1.4,
+  bayLateral: 3.4, // further off-lane than this while stopped = parked, not blocking
+};
 
 export function createTraffic(ctx) {
-  const city = ctx.city;
-  const vehicles = ctx.vehicles;
-  const rng = ctx.rng ?? createRng(193742);
+  const fleet = ctx.vehicles;
+  if (!fleet) throw new Error('createTraffic needs ctx.vehicles (call createVehicleSystem first)');
+  const network = ctx.city?.network ?? ctx.network;
+  if (!network) throw new Error('createTraffic needs ctx.city.network');
+
+  const rng = mulberry32((CITY.seed ^ 0x7a1c) >>> 0);
+  const root = new THREE.Group();
+  root.name = 'Traffic';
+  if (ctx.scene) ctx.scene.add(root);
+
   const cars = [];
-  const pedestrians = () => ctx.pedestrians?.getPedestrians?.() ?? [];
-  const movingCount = ctx.trafficCount ?? 11;
-  const parkedCount = ctx.parkedCarCount ?? 9;
+  const parkedCars = [];
+  const hooks = { onHorn: null };
+  let recycleTimer = 0;
 
-  function allowedSpan(road) {
-    const span = road.axis === 'z'
-      ? [Math.max(road.start + 10, CITY.worldMinZ + 9), Math.min(road.end - 10, CITY.coastZ - 7)]
-      : [road.start + 10, road.end - 10];
-    return span;
-  }
+  const traffic = {
+    root,
+    cars,
+    parkedCars,
+    hooks,
+    registerHooks(h) {
+      if (h && typeof h.onHorn === 'function') hooks.onHorn = h.onHorn;
+    },
 
-  function pickRoad(exclude = null) {
-    const candidates = city.roads.filter((road) => road !== exclude && allowedSpan(road)[1] > allowedSpan(road)[0]);
-    return choose(rng, candidates.length ? candidates : city.roads);
-  }
-
-
-  function spawnMoving(index) {
-    const road = pickRoad();
-    const [start, end] = allowedSpan(road);
-    const direction = rng() < 0.5 ? -1 : 1;
-    const along = randomRange(rng, start, end);
-    const position = lanePosition(road.axis, road.coordinate, direction, along);
-    const car = vehicles.createCar({
-      modelId: choose(rng, MOVING_MODELS),
-      x: position.x,
-      z: position.z,
-      heading: road.axis === 'z' ? (direction > 0 ? 0 : Math.PI) : (direction > 0 ? Math.PI / 2 : -Math.PI / 2),
-      ai: 'traffic',
-      name: `Solmar traffic ${index + 1}`,
-    });
-    const state = { car, axis: road.axis, coordinate: road.coordinate, direction, goal: null, changeAt: null, stopped: false, seed: rng() };
-    cars.push(state);
-    chooseNextGoal(state, road);
-    return state;
-  }
-
-  function chooseNextGoal(state, road) {
-    const along = state.axis === 'z' ? state.car.position.z : state.car.position.x;
-    const intersections = city.intersections.filter((node) => state.axis === 'z' ? node.x === state.coordinate : node.z === state.coordinate);
-    const ahead = intersections
-      .map((node) => ({ node, along: state.axis === 'z' ? node.z : node.x }))
-      .filter((entry) => state.direction > 0 ? entry.along > along + 2 : entry.along < along - 2)
-      .sort((a, b) => (a.along - b.along) * state.direction);
-    if (ahead.length) {
-      const cross = ahead[0];
-      state.changeAt = cross.along;
-      state.goal = { x: cross.node.x, z: cross.node.z };
-    } else {
-      const [start, end] = allowedSpan(road);
-      state.changeAt = state.direction > 0 ? end : start;
-      state.goal = state.axis === 'z' ? { x: state.coordinate, z: state.changeAt } : { x: state.changeAt, z: state.coordinate };
-    }
-  }
-
-  function chooseTurn(state) {
-    const node = state.goal;
-    const previousRoad = city.roads.find((entry) => entry.axis === state.axis && entry.coordinate === state.coordinate);
-    const [routeStart, routeEnd] = allowedSpan(previousRoad);
-    const routeAlong = state.axis === 'z' ? node.z : node.x;
-    const reachedEnd = state.direction > 0 ? routeAlong >= routeEnd - 1 : routeAlong <= routeStart + 1;
-    const canTurn = state.seed > 0.35;
-    state.seed = (state.seed * 16807 + 0.12345) % 1;
-    if (canTurn && rng() < 0.31) {
-      state.axis = state.axis === 'z' ? 'x' : 'z';
-      state.coordinate = state.axis === 'z' ? node.x : node.z;
-      state.direction = rng() < 0.5 ? -1 : 1;
-    } else if (reachedEnd) {
-      state.direction *= -1;
-    }
-    const place = lanePosition(state.axis, state.coordinate, state.direction, state.axis === 'z' ? node.z : node.x);
-    state.car.position.set(place.x, 0, place.z);
-    state.car.mesh.position.copy(state.car.position);
-    state.car.heading = state.axis === 'z' ? (state.direction > 0 ? 0 : Math.PI) : (state.direction > 0 ? Math.PI / 2 : -Math.PI / 2);
-    state.car.mesh.rotation.y = state.car.heading;
-    state.goal = null;
-    state.changeAt = null;
-    const road = city.roads.find((entry) => entry.axis === state.axis && entry.coordinate === state.coordinate);
-    if (road) chooseNextGoal(state, road);
-  }
-
-  function aheadDistance(car, other) {
-    const dx = other.position.x - car.position.x;
-    const dz = other.position.z - car.position.z;
-    const forwardX = Math.sin(car.heading);
-    const forwardZ = Math.cos(car.heading);
-    const along = dx * forwardX + dz * forwardZ;
-    const side = Math.abs(dx * forwardZ - dz * forwardX);
-    const otherWidth = other.width ?? (other.radius ? other.radius * 2 : 0.8);
-    return side < car.width * 0.78 + otherWidth * 0.45 && along > 0 && along < 16 ? along : Infinity;
-  }
-
-  function obstacleGap(state, player) {
-    const car = state.car;
-    let gap = Infinity;
-    for (const other of vehicles.getCars()) {
-      if (other === car || other.parked) continue;
-      gap = Math.min(gap, aheadDistance(car, other));
-    }
-    if (player?.position) {
-      const playerCar = player.car ?? player.vehicle;
-      const target = playerCar?.position ?? player.position;
-      const pseudo = { position: target, width: playerCar?.width ?? 0.8 };
-      gap = Math.min(gap, aheadDistance(car, pseudo));
-    }
-    for (const walker of pedestrians()) {
-      if (walker.hit || !walker.active) continue;
-      gap = Math.min(gap, aheadDistance(car, walker));
-    }
-    return gap;
-  }
-
-  function spawnParked(index) {
-    const road = pickRoad();
-    const [start, end] = allowedSpan(road);
-    let along = randomRange(rng, start, end);
-    const minimumGap = 7.5;
-    for (let attempt = 0; attempt < 16; attempt += 1) {
-      const clear = cars.every((entry) => {
-        if (!entry.parked || entry.road !== road) return true;
-        const otherAlong = road.axis === 'z' ? entry.car.position.z : entry.car.position.x;
-        return Math.abs(otherAlong - along) > minimumGap;
+    // ------------------------------------------------------------ spawning
+    spawnTrafficCar(ix, iz) {
+      const node = network.nodes(ix, iz);
+      const options = network.neighbours(ix, iz);
+      if (!options.length) return null;
+      const next = pick(rng, options);
+      const lane = laneTarget(network, { ix, iz }, next);
+      const modelId = pick(rng, ['coral', 'vista', 'marlin', 'kestrel', 'pelican', 'sandpiper']);
+      const car = fleet.spawn({
+        modelId,
+        x: lane.x,
+        z: lane.z,
+        heading: lane.heading,
+        role: 'traffic',
+        lights: 'on',
       });
-      if (clear) break;
-      along = randomRange(rng, start, end);
-    }
-    const side = rng() < 0.5 ? -1 : 1;
-    const position = road.axis === 'z'
-      ? { x: road.coordinate + side * (CITY.roadWidth / 2 + 1.4), z: along }
-      : { x: along, z: road.coordinate + side * (CITY.roadWidth / 2 + 1.4) };
-    const car = vehicles.createCar({
-      modelId: choose(rng, PARKED_MODELS), x: position.x, z: position.z,
-      heading: road.axis === 'z' ? 0 : Math.PI / 2,
-      parked: true, ai: 'parked', name: `Parked car ${index + 1}`,
-    });
-    cars.push({ car, parked: true, road });
-    return car;
+      car.ai = {
+        ix,
+        iz,
+        nix: next.ix,
+        niz: next.iz,
+        tx: lane.ex,
+        tz: lane.ez,
+        laneHeading: lane.heading,
+        cruise: rand(rng, AI.cruiseMin, AI.cruiseMax),
+        wait: 0,
+        stuck: 0,
+        lastHorn: -99,
+        blocked: false,
+        wobble: rand(rng, 0, TAU),
+      };
+      cars.push(car);
+      fleet.makeTicking(car);
+      return car;
+    },
+
+    spawnParked(count = 24) {
+      const spots = ctx.city?.parkingSpots ?? [];
+      if (!spots.length) return [];
+      const used = [];
+      // Walk the list with a random start so parked cars are spread over the map.
+      const order = [];
+      for (let i = 0; i < spots.length; i += 1) order.push(i);
+      for (let i = order.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(rng() * (i + 1));
+        const t = order[i];
+        order[i] = order[j];
+        order[j] = t;
+      }
+
+      for (const index of order) {
+        if (parkedCars.length >= count) break;
+        const spot = spots[index];
+        let free = true;
+        for (const other of used) {
+          if (dist2D(spot.x, spot.z, other.x, other.z) < 7.6) {
+            free = false;
+            break;
+          }
+        }
+        if (!free) continue;
+        // Keep the spawn point and the first mission pickup clear.
+        const spawn = CITY.playerStart;
+        if (dist2D(spot.x, spot.z, spawn.x, spawn.z) < 12) continue;
+        used.push(spot);
+        const car = fleet.spawn({
+          modelId: pick(rng, ['kestrel', 'marlin', 'coral', 'vista', 'pelican', 'sandpiper']),
+          x: spot.x,
+          z: spot.z,
+          heading: spot.heading,
+          role: 'parked',
+        });
+        car.ai = null;
+        parkedCars.push(car);
+      }
+      return parkedCars;
+    },
+
+    // ------------------------------------------------------------- driving
+    update(dt, player) {
+      if (!(dt > 0)) return;
+      const playerPos = readPlayerPosition(player ?? ctx.player);
+
+      for (let i = cars.length - 1; i >= 0; i -= 1) {
+        const car = cars[i];
+        if (car.removed || car.role !== 'traffic') {
+          // The player stole it (or it was cleaned up): forget it.
+          cars.splice(i, 1);
+          continue;
+        }
+        driveCar(car, dt, traffic, ctx, playerPos);
+      }
+
+      recycleTimer -= dt;
+      if (recycleTimer <= 0) {
+        recycleTimer = AI.recycleCheck;
+        recycleTraffic(traffic, ctx, playerPos);
+      }
+    },
+
+    respawnNear(player) {
+      const pos = readPlayerPosition(player ?? ctx.player);
+      const node = network.nearestNodeIndex(pos.x, pos.z);
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const ix = clamp(node.ix + randInt(rng, -2, 2), 0, network.nodeCount.x - 1);
+        const iz = clamp(node.iz + randInt(rng, -2, 2), 0, network.nodeCount.z - 1);
+        const n = network.nodes(ix, iz);
+        const d = dist2D(n.x, n.z, pos.x, pos.z);
+        if (d < 24 || d > TRAFFIC.spawnRange) continue;
+        if (fleet.nearest(n.x, n.z, AI.spawnClearance)) continue;
+        return traffic.spawnTrafficCar(ix, iz);
+      }
+      return null;
+    },
+
+    stats() {
+      return { traffic: cars.length, parked: parkedCars.length };
+    },
+  };
+
+  ctx.traffic = traffic;
+  return traffic;
+}
+
+// --------------------------------------------------------------- the driving
+
+function driveCar(car, dt, traffic, ctx, playerPos) {
+  const ai = car.ai;
+  if (!ai) return;
+  const network = ctx.city.network;
+
+  // Reached the end of this segment: pick the next node and re-aim.
+  if (dist2D(car.x, car.z, ai.tx, ai.tz) < AI.arriveRadius) {
+    advanceNode(car, traffic, ctx);
+    if (!car.ai) return;
   }
 
-  function update(dt) {
-    const player = ctx.player;
-    for (const state of cars) {
-      const car = state.car;
-      if (!car.active || state.parked) continue;
-      const along = state.axis === 'z' ? car.position.z : car.position.x;
-      const atIntersection = state.changeAt !== null && Math.abs(along - state.changeAt) < 1.5;
-      if (atIntersection) chooseTurn(state);
-      const gap = obstacleGap(state, player);
-      state.stopped = gap < 5.6;
-      const targetSpeed = state.stopped ? 0 : (state.car.model.maxSpeed * (gap < 12 ? 0.48 : 0.62));
-      const throttle = targetSpeed > Math.abs(car.speed) + 0.8 ? 0.56 : 0;
-      vehicles.setControls(car, { throttle, brake: state.stopped ? clamp((5.6 - gap) / 5.6, 0.45, 1) : 0, steer: 0 });
-      if (!state.stopped && Math.abs(car.speed) > targetSpeed) car.speed = Math.sign(car.speed) * targetSpeed;
-      if (state.goal) {
-        const target = state.goal;
-        const dx = target.x - car.position.x;
-        const dz = target.z - car.position.z;
-        if (Math.hypot(dx, dz) < 2) state.changeAt = state.axis === 'z' ? target.z : target.x;
+  // Aim at the lane end point, but start turning into the next lane a little
+  // early so corners look like corners rather than pivots.
+  let aimX = car.ai.tx;
+  let aimZ = car.ai.tz;
+  const dEnd = dist2D(car.x, car.z, aimX, aimZ);
+  if (dEnd < AI.turnLookahead) {
+    const pull = 1 - dEnd / AI.turnLookahead;
+    const ahead = car.ai.aimNext;
+    if (ahead) {
+      aimX = lerp(aimX, ahead.x, pull * 0.55);
+      aimZ = lerp(aimZ, ahead.z, pull * 0.55);
+    }
+  }
+
+  const desiredHeading = Math.atan2(aimX - car.x, aimZ - car.z);
+  const err = angleDelta(car.heading, desiredHeading);
+
+  // ---- obstacle scan: anything in the forward corridor slows us down.
+  const scan = scanAhead(car, traffic, ctx, playerPos);
+  ai.blocked = scan.blocked;
+
+  let targetSpeed = ai.cruise;
+  if (scan.nearest < TRAFFIC.slowRadius) {
+    const t = clamp(scan.nearest / TRAFFIC.slowRadius, 0, 1);
+    targetSpeed = scan.blocked ? 0 : ai.cruise * lerp(0.15, 1, t);
+  }
+  if (Math.abs(err) > 0.85) targetSpeed = Math.min(targetSpeed, 4.5);
+
+  // Slow down for a turn onto a new lane.
+  if (car.ai.pendingTurn) {
+    targetSpeed = Math.min(targetSpeed, 6.0);
+    if (Math.abs(err) < 0.4) car.ai.pendingTurn = false;
+  }
+
+  const speed = car.speed;
+  let throttle = 0;
+  let brake = 0;
+  if (targetSpeed < 0.4) {
+    throttle = speed > 1.2 ? -0.5 : 0;
+    brake = speed > 0.6 ? 1 : 0;
+  } else if (speed < targetSpeed - 0.6) {
+    throttle = clamp((targetSpeed - speed) / 5, 0.25, 1);
+  } else if (speed > targetSpeed + 0.8) {
+    throttle = 0;
+    brake = clamp((speed - targetSpeed) / 6, 0, 1);
+  }
+
+  const steer = clamp(err * 1.9, -1, 1);
+  car.setControls({ throttle, steer, brake });
+
+  // Stuck detection: if we have wanted to move for a while and nothing happens,
+  // lean on the horn, then back up, then eventually respawn elsewhere.
+  if (targetSpeed > 3 && Math.abs(speed) < 0.35) {
+    ai.stuck += dt;
+    const now = ctx.time ?? 0;
+    if (ai.stuck > 1.4 && now - ai.lastHorn > TRAFFIC.hornCooldown) {
+      ai.lastHorn = now;
+      if (typeof traffic.hooks.onHorn === 'function') {
+        traffic.hooks.onHorn({ car, x: car.x, z: car.z, kind: 'traffic' });
       }
     }
+  } else {
+    ai.stuck = Math.max(0, ai.stuck - dt * 0.8);
   }
 
-  for (let i = 0; i < movingCount; i += 1) spawnMoving(i);
-  for (let i = 0; i < parkedCount; i += 1) spawnParked(i);
-  const api = {
-    cars,
-    update,
-    spawnParked,
-    spawnTrafficCar: spawnMoving,
-    getCars() { return cars.map((state) => state.car).filter((car) => car.active); },
-    getMovingCars() { return cars.filter((state) => !state.parked).map((state) => state.car).filter((car) => car.active); },
+  if (ai.stuck > AI.stuckTime) {
+    ai.stuck = 0;
+    // Back up briefly then re-aim; if still stuck next time, recycle.
+    if (!ai.unstick) {
+      ai.unstick = 1.1;
+      car.setControls({ throttle: -1, steer: -steer, brake: 0 });
+    } else {
+      ai.unstick = 0;
+      if (ctx.traffic && ctx.traffic.cars.includes(car)) {
+        recycleOne(car, ctx);
+      }
+    }
+  } else if (ai.unstick > 0) {
+    ai.unstick -= dt;
+  }
+
+  // Left-hand traffic wobble in the lane, tiny and purely cosmetic.
+  ai.wobble += dt * 0.6;
+}
+
+// Pick the next node when the current lane end is reached.
+function advanceNode(car, traffic, ctx) {
+  const network = ctx.city.network;
+  const ai = car.ai;
+  const options = network.neighbours(ai.nix, ai.niz);
+  if (!options.length) {
+    recycleOne(car, ctx);
+    return;
+  }
+  // Prefer not to U-turn: drop the node we came from unless it is the only way.
+  const filtered = options.filter((o) => !(o.ix === ai.ix && o.iz === ai.iz));
+  const pool = filtered.length ? filtered : options;
+
+  // Straight on is favoured, then right, then left; a little randomness.
+  let next = pool[0];
+  let bestScore = -Infinity;
+  for (const o of pool) {
+    const heading = network.headingTo(o.dx, o.dz);
+    const turn = Math.abs(angleDelta(ai.laneHeading, heading));
+    let score = -turn * 1.2 + Math.random() * 0.9;
+    if (turn < 0.1) score += 1.4;
+    if (score > bestScore) {
+      bestScore = score;
+      next = o;
+    }
+  }
+
+  const lane = laneTarget(network, { ix: ai.nix, iz: ai.niz }, next);
+  ai.ix = ai.nix;
+  ai.iz = ai.niz;
+  ai.nix = next.ix;
+  ai.niz = next.iz;
+  ai.tx = lane.ex;
+  ai.tz = lane.ez;
+  ai.laneHeading = lane.heading;
+  ai.pendingTurn = Math.abs(angleDelta(car.heading, lane.heading)) > 0.25;
+  ai.cruise = clamp(ai.cruise + rand(Math.random, -1.2, 1.2), AI.cruiseMin, AI.cruiseMax);
+
+  // Pre-aim at the lane after that, for a smoother corner blend.
+  const after = network.neighbours(ai.nix, ai.niz).filter((o) => !(o.ix === ai.ix && o.iz === ai.iz));
+  if (after.length) {
+    const pickAfter = after[0];
+    const laneAfter = laneTarget(network, { ix: ai.nix, iz: ai.niz }, pickAfter);
+    ai.aimNext = { x: laneAfter.ex, z: laneAfter.ez };
+  } else {
+    ai.aimNext = null;
+  }
+}
+
+// Forward corridor test: returns { nearest, blocked, target }.
+function scanAhead(car, traffic, ctx, playerPos) {
+  const fx = Math.sin(car.heading);
+  const fz = Math.cos(car.heading);
+  const rx = Math.cos(car.heading);
+  const rz = -Math.sin(car.heading);
+  let nearest = Infinity;
+  let blocked = false;
+  let target = null;
+
+  const consider = (x, z, radius) => {
+    const dx = x - car.x;
+    const dz = z - car.z;
+    const ahead = dx * fx + dz * fz;
+    if (ahead <= 0.2 || ahead > TRAFFIC.slowRadius * 1.5) return;
+    const lateral = Math.abs(dx * rx + dz * rz);
+    if (lateral > AI.avoidLateral + radius) return;
+    if (ahead < nearest) {
+      nearest = ahead;
+      target = { x, z };
+    }
+    if (ahead < TRAFFIC.stopDistance && lateral < AI.avoidLateral + radius * 0.6) blocked = true;
   };
-  ctx.traffic = api;
-  return api;
+
+  // Other cars (traffic, the player's car, police cars). A car that is sitting
+  // still and off to the side is in the kerbside bay, not the travel lane: the
+  // bays are ~2.7 m from the lane centre, so counting those as blockers would
+  // wedge traffic against every parked car on the street.
+  const list = ctx.vehicles.list;
+  for (const other of list) {
+    if (other === car || other.removed) continue;
+    const lateral = Math.abs((other.x - car.x) * rx + (other.z - car.z) * rz);
+    if (Math.abs(other.speed) < 1 && lateral > AI.bayLateral) continue;
+    const otherFwd = other.speed * (other.forwardX * fx + other.forwardZ * fz);
+    // Ignore cars travelling away from us fast enough that they are pulling clear.
+    if (otherFwd > 6 && (other.x - car.x) * fx + (other.z - car.z) * fz > 4) continue;
+    consider(other.x, other.z, other.halfWidth);
+  }
+
+  // The player on foot is a hazard too.
+  if (playerPos) {
+    const pdx = playerPos.x - car.x;
+    const pdz = playerPos.z - car.z;
+    if (pdx * pdx + pdz * pdz < 400) consider(playerPos.x, playerPos.z, 0.9);
+  }
+
+  // Pedestrians crossing the corridor.
+  const peds = ctx.pedestrians;
+  if (peds && peds.list) {
+    for (const ped of peds.list) {
+      if (!ped || ped.state === 'down') continue;
+      const dx = ped.x - car.x;
+      const dz = ped.z - car.z;
+      if (dx * dx + dz * dz > 900) continue;
+      consider(ped.x, ped.z, 0.7);
+    }
+  }
+
+  return { nearest, blocked, target };
+}
+
+// ---------------------------------------------------------------- recycling
+
+function recycleOne(car, ctx) {
+  const traffic = ctx.traffic;
+  if (!traffic) return;
+  const list = traffic.cars;
+  const i = list.indexOf(car);
+  if (i >= 0) list.splice(i, 1);
+  ctx.vehicles.remove(car);
+  traffic.respawnNear(ctx.player);
+}
+
+function recycleTraffic(traffic, ctx, playerPos) {
+  if (!playerPos) return;
+  const network = ctx.city.network;
+  const slow = TRAFFIC.despawnRange * TRAFFIC.despawnRange;
+  for (const car of traffic.cars.slice()) {
+    const d2 = distSq2D(car.x, car.z, playerPos.x, playerPos.z);
+    const occupied = car.occupiedBy || car.role !== 'traffic';
+    if (occupied) continue;
+    if (d2 > slow) {
+      const i = traffic.cars.indexOf(car);
+      if (i >= 0) traffic.cars.splice(i, 1);
+      ctx.vehicles.remove(car);
+    }
+  }
+
+  // Top the population back up around the player.
+  let guard = 0;
+  while (traffic.cars.length < TRAFFIC.count && guard < 8) {
+    guard += 1;
+    const node = network.nearestNodeIndex(playerPos.x, playerPos.z);
+    const ix = clamp(node.ix + randInt(Math.random, -3, 3), 0, network.nodeCount.x - 1);
+    const iz = clamp(node.iz + randInt(Math.random, -3, 3), 0, network.nodeCount.z - 1);
+    const n = network.nodes(ix, iz);
+    const d = dist2D(n.x, n.z, playerPos.x, playerPos.z);
+    if (d < 18 || d > TRAFFIC.spawnRange) continue;
+    if (ctx.vehicles.nearest(n.x, n.z, AI.spawnClearance)) continue;
+    traffic.spawnTrafficCar(ix, iz);
+  }
+}
+
+// --------------------------------------------------------------- shared bits
+
+// Player position fallback across candidates, so traffic works whether the
+// player is on foot or in a car (main.js exposes ctx.player with x/z).
+export function readPlayerPosition(player) {
+  if (!player) return null;
+  if (typeof player.x === 'number' && typeof player.z === 'number') {
+    return { x: player.x, z: player.z };
+  }
+  if (player.position && typeof player.position.x === 'number') {
+    return { x: player.position.x, z: player.position.z };
+  }
+  return null;
 }

@@ -17,10 +17,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
+// Neon Harbor is an original three.js open-world crime game set in Solmar Bay: a walkable,
+// driveable neon-lit harbour city with traffic, pedestrians, a wanted system, missions, a HUD,
+// procedural audio and save/screenshot hooks, all served as plain static files the browser opens
+// offline. This program only copies that build and writes its dossier; it is not the game.
 const GAME_TITLE = 'Neon Harbor';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
-console.log(`${GAME_TITLE}: preparing static game entry`);
+console.log(`${GAME_TITLE}: Solmar Bay open-world entry — hand-in build`);
 
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
