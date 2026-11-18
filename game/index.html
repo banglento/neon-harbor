@@ -2,18 +2,56 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#102b37">
+<link rel="icon" href="data:,">
+<title>Neon Harbor — Solmar Bay</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root{color-scheme:dark;--ink:#f6f0dc;--muted:#b6c5c5;--aqua:#63e1cf;--gold:#ffd27a;--glass:rgba(9,27,37,.78);--line:rgba(228,247,236,.22)}
+  *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#75c9dd;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  button{font:inherit;color:inherit}#world{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
+  .hud{position:fixed;inset:0;pointer-events:none;user-select:none;text-shadow:0 2px 12px #10252c}
+  .topbar{position:absolute;left:24px;right:24px;top:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+  .brand{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#d3f1e8;font-weight:800}.money{font-size:27px;font-weight:850;letter-spacing:.02em;margin-top:4px}.money small{font-size:13px;color:var(--gold);vertical-align:4px;margin-right:5px}
+  .condition{width:188px;margin-top:7px}.condition-label{font-size:10px;letter-spacing:.17em;font-weight:800;color:#e6eeee;margin-bottom:6px}.condition-track{height:8px;border:1px solid #e6eee8a6;background:#152e3980;border-radius:8px;overflow:hidden}.condition-fill{height:100%;width:100%;background:linear-gradient(90deg,#61d6a4,#e3dd89);border-radius:8px;transition:width .15s}
+  .wanted{display:flex;justify-content:flex-end;gap:5px;font-size:24px;color:#ffffff50;line-height:1}.wanted .active{color:#ffc763;text-shadow:0 0 12px #ffad37}
+  .objective{position:absolute;left:50%;top:26px;transform:translateX(-50%);max-width:min(44vw,560px);padding:11px 20px 12px;text-align:center;border:1px solid var(--line);border-radius:12px;background:var(--glass);backdrop-filter:blur(8px)}
+  .objective-label{font-size:9px;letter-spacing:.22em;color:var(--aqua);font-weight:900;text-transform:uppercase}.objective-text{font-size:15px;font-weight:700;margin-top:3px;line-height:1.35}
+  .bottom-left{position:absolute;left:24px;bottom:22px;display:flex;align-items:flex-end;gap:14px}.minimap-wrap{width:176px;height:176px;padding:5px;border:1px solid #e8f5e66b;border-radius:14px;background:#10242dc9;box-shadow:0 8px 32px #10242d45}.minimap-wrap canvas{width:100%;height:100%;display:block;border-radius:10px}.location{padding:0 0 6px;font-weight:850;font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:#e8f4e8}.location small{display:block;color:var(--aqua);font-size:9px;letter-spacing:.22em;margin-bottom:6px}
+  .controls{position:absolute;right:24px;bottom:24px;text-align:right;color:#fff;font-size:11px;line-height:1.9}.key{display:inline-block;min-width:22px;padding:1px 5px;border:1px solid #f2f4e588;border-radius:5px;background:#142e38a6;text-align:center;font-size:10px;font-weight:800}
+  .toast{position:absolute;left:50%;top:31%;transform:translate(-50%,-50%);padding:12px 20px;border-radius:10px;background:var(--glass);border:1px solid var(--line);font-weight:800;opacity:0;transition:opacity .2s}.toast.show{opacity:1}
+  .overlay{position:fixed;inset:0;z-index:5;display:grid;place-items:center;padding:24px;background:linear-gradient(90deg,rgba(9,28,40,.65),rgba(9,28,40,.13) 74%),linear-gradient(0deg,rgba(8,26,36,.28),transparent 60%);backdrop-filter:blur(2px)}.overlay[hidden]{display:none}
+  .panel{width:min(600px,94vw);padding:clamp(25px,5vw,52px);border:1px solid #d4f4e34b;border-radius:19px;background:linear-gradient(140deg,rgba(13,41,50,.94),rgba(17,39,46,.88));box-shadow:0 28px 90px #061c2766;backdrop-filter:blur(16px)}
+  .eyebrow{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--aqua);font-weight:900}.title{font-size:clamp(43px,8vw,74px);line-height:.93;letter-spacing:-.065em;margin:12px 0 18px;font-weight:950}.title span{color:var(--gold)}.subtitle{font-size:14px;line-height:1.7;color:#d1dfd9;max-width:475px}.story{margin-top:21px;padding:15px 17px;border-left:2px solid var(--gold);background:#ffffff08;font-size:13px;line-height:1.6;color:#e5e8dc}.actions{display:flex;flex-wrap:wrap;gap:11px;margin-top:24px}.action{border:1px solid #8cf0dc77;border-radius:9px;background:linear-gradient(135deg,#48cdb7,#50b7a7);color:#0c2b31;padding:12px 20px;min-width:148px;font-size:13px;font-weight:900;letter-spacing:.03em;cursor:pointer;box-shadow:0 7px 20px #43cbb633;transition:transform .15s,filter .15s}.action:hover{transform:translateY(-2px);filter:brightness(1.1)}.action.secondary{background:#d8e7de0c;color:var(--ink);border-color:#e9f0db4d;box-shadow:none}.action:disabled{opacity:.4;cursor:not-allowed;transform:none}.hint{font-size:10px;color:#a7bfbd;margin-top:19px;letter-spacing:.04em}
+  .compact{width:min(470px,94vw);text-align:center}.compact .title{font-size:clamp(36px,7vw,58px);margin-top:8px}.compact .actions{justify-content:center}.compact .subtitle{margin-inline:auto}
+  @media(max-width:700px){.topbar{left:13px;right:13px;top:13px}.money{font-size:21px}.condition{width:120px}.objective{top:auto;bottom:205px;max-width:80vw;padding:9px 12px}.objective-text{font-size:12px}.bottom-left{left:13px;bottom:13px;gap:8px}.minimap-wrap{width:132px;height:132px}.controls{right:13px;bottom:13px;font-size:9px}.location{display:none}.wanted{font-size:20px}.overlay{padding:12px}}
+  @media(max-height:520px){.minimap-wrap{width:112px;height:112px}.objective{top:85px}.panel{padding:20px 25px}.story{margin-top:12px}.actions{margin-top:14px}.hint{margin-top:10px}}
 </style>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<canvas id="world" aria-label="Neon Harbor: explore Solmar Bay on foot and by car"></canvas>
+<div id="hud" class="hud" hidden>
+  <div class="topbar"><div><div class="brand">SOLMAR BAY · COASTAL DISTRICT</div><div class="money"><small>$</small><span id="cash">0</span></div></div>
+    <div id="objective" class="objective"><div id="objective-label" class="objective-label">Current job</div><div id="objective-text" class="objective-text">Find your next lead</div></div>
+    <div><div class="condition-label">CONDITION</div><div class="condition"><div class="condition-track"><div id="condition-fill" class="condition-fill"></div></div></div><div id="wanted" class="wanted" aria-label="Wanted level"></div></div>
+  </div>
+  <div class="bottom-left"><div class="minimap-wrap"><canvas id="minimap" width="256" height="256" aria-label="City minimap"></canvas></div><div class="location"><small>NEON HARBOR</small><span id="respect">NO WAKE</span></div></div>
+  <div id="controls" class="controls"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> move / drive<br><span class="key">SHIFT</span> sprint &nbsp; <span class="key">E</span> enter / exit<br><span class="key">F</span> shove &nbsp; <span class="key">P</span> pause &nbsp; <span class="key">M</span> mute</div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</div>
+<section id="start-screen" class="overlay" aria-label="Neon Harbor title screen">
+  <div class="panel"><div class="eyebrow">A Solmar Bay story</div><h1 class="title">NEON<br><span>HARBOR</span></h1>
+    <div class="subtitle">The sun is warm. The water is calm. The city keeps its own kind of time.</div>
+    <div class="story"><strong>Mara Velez</strong> knows every shortcut in Solmar Bay. One last courier job should buy her a clean start — if she can keep the package, the cops and the past from catching up.</div>
+    <div class="actions"><button id="new-game" class="action">NEW GAME</button><button id="continue-game" class="action secondary" disabled>CONTINUE</button></div>
+    <div class="hint">WASD move · Mouse drag look · Shift run · E enter/exit · F shove · P pause</div>
+  </div>
+</section>
+<section id="pause-screen" class="overlay" hidden><div class="panel compact"><div class="eyebrow">Take a breath</div><h2 class="title">PAUSED</h2><div class="subtitle">Solmar Bay will still be here when you're ready.</div><div class="actions"><button id="resume-game" class="action">BACK TO THE BAY</button><button id="pause-new-game" class="action secondary">NEW GAME</button></div></div></section>
+<section id="busted-screen" class="overlay" hidden><div class="panel compact"><div class="eyebrow">Solmar Bay Police</div><h2 class="title">BUSTED</h2><div id="busted-copy" class="subtitle">You lost some cash, but you still have a way out.</div><div class="actions"><button id="busted-continue" class="action">GET BACK OUT THERE</button></div></div></section>
+<section id="complete-screen" class="overlay" hidden><div class="panel compact"><div class="eyebrow">The Solmar Bay story</div><h2 class="title">CLEAN<br><span>HORIZON</span></h2><div class="subtitle">Mara has her way out. The harbor lights fade behind her.</div><div class="actions"><button id="complete-continue" class="action">KEEP EXPLORING</button></div></div></section>
+<section id="briefing-screen" class="overlay" hidden><div class="panel compact"><div class="eyebrow">Incoming job</div><h2 id="briefing-title" class="title">THE LAST RUN</h2><div id="briefing-copy" class="subtitle"></div><div class="actions"><button id="briefing-continue" class="action">LET'S MOVE</button></div></div></section>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -1,79 +1,142 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// Deterministic visual staging for the four reviewer capture states.
+import { createRng, randomRange } from './util.js';
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
+// The downtown boulevard sits at z = 45; its two lanes are at z = 43.35 (near) and 46.65 (far).
+const LANE_NEAR = 43.35;
+const LANE_FAR = 46.65;
+// Sidewalk bands flank the boulevard at z = 51.4 (north) and z = 38.6 (south).
+const WALK_NORTH = 51.4;
+const WALK_SOUTH = 38.6;
+const WEST = -Math.PI / 2;
+const EAST = Math.PI / 2;
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
+export function createShots(ctx) {
+  const query = new URLSearchParams(window.location.search);
+  const name = query.get('shot');
+  const seed = Number(query.get('seed') ?? 1) || 1;
+  const rng = createRng(seed);
+  const known = new Set(['cover', 'chase', 'foot', 'start']);
+  const active = known.has(name);
+  let staged = false;
+
+  function setPosition(actor, x, z, heading = 0) {
+    actor.position.set(x, 0, z);
+    actor.heading = heading;
+    actor.mesh?.position.copy(actor.position);
+    if (actor.mesh) actor.mesh.rotation.y = heading;
+    return actor;
+  }
+
+  function placeCar(car, x, z, heading) {
+    car.position.set(x, 0, z);
+    car.heading = heading;
+    car.speed = 0;
+    car.controls.throttle = 0;
+    car.controls.steer = 0;
+    car.controls.brake = 1;
+    car.parked = true;
+    car.mesh.position.copy(car.position);
+    car.mesh.rotation.y = heading;
+    return car;
+  }
+
+  function freezeCars() {
+    for (const car of ctx.vehicles.getCars()) placeCar(car, car.position.x, car.position.z, car.heading);
+  }
+
+  function stageCover(traffic) {
+    const car = placeCar(ctx.vehicles.createCar({ modelId: 'cielo', x: 46, z: LANE_NEAR, heading: WEST, name: 'Mara’s Cielo GT' }), 46, LANE_NEAR, WEST);
+    setPosition(ctx.player, 46, LANE_NEAR, WEST);
+    ctx.player.car = car;
+    ctx.player.vehicle = car;
+    ctx.player.mesh.visible = false;
+    traffic.slice(0, 8).forEach((entry, index) => {
+      const ahead = 30 - index * 9;
+      placeCar(entry, ahead, index % 2 ? LANE_FAR : LANE_NEAR, index % 2 ? EAST : WEST);
+    });
+    traffic.slice(8, 12).forEach((entry, index) => {
+      placeCar(entry, 64 + index * 9, index % 2 ? LANE_FAR : LANE_NEAR, index % 2 ? EAST : WEST);
+    });
+    ctx.missions.restore({ missionsCompleted: [] });
+    ctx.missions.overrideHUD('First Run: deliver the package to Mirador Court · 92s', [{ x: 80, z: -68, label: 'Mirador Court', type: 'delivery' }]);
+    ctx.cameraRig?.snap?.(0.12);
+  }
+
+  function stageChase(traffic) {
+    const car = placeCar(ctx.vehicles.createCar({ modelId: 'tide', x: 22, z: LANE_NEAR, heading: WEST, name: 'Mara’s Tide Runner' }), 22, LANE_NEAR, WEST);
+    setPosition(ctx.player, 22, LANE_NEAR, WEST);
+    ctx.player.car = car;
+    ctx.player.vehicle = car;
+    ctx.player.mesh.visible = false;
+    ctx.police.raiseWanted(4, 'shot staging');
+    const units = ctx.police.getUnits();
+    while (units.length > 2) { const extra = units[units.length - 1]; units.pop(); ctx.vehicles.removeCar(extra.car); }
+    units.forEach((unit, index) => {
+      // Ahead of the player and facing back up the boulevard, so both lightbars read clearly in the shot.
+      placeCar(unit.car, index === 0 ? 9 : 15.5, index === 0 ? LANE_FAR : LANE_NEAR, index === 0 ? EAST : WEST);
+    });
+    traffic.slice(0, 6).forEach((entry, index) => {
+      placeCar(entry, -14 - index * 9, index % 2 ? LANE_FAR : LANE_NEAR, index % 2 ? EAST : WEST);
+    });
+    ctx.missions.overrideHUD('Harbor Lights: evade the Solmar Bay Police and reach the harbor escape point', [{ x: 64, z: 153, label: 'Harbor Escape', type: 'escape' }]);
+    ctx.cameraRig?.snap?.(0.22);
+  }
+
+  function stageFoot(traffic, walkers) {
+    setPosition(ctx.player, -21.8, 49.9, WEST);
+    walkers.forEach((walker, index) => {
+      const north = index % 2 === 0;
+      setPosition(walker, -34 + index * 4.4, (north ? WALK_NORTH : WALK_SOUTH) + randomRange(rng, -0.45, 0.45), north ? WEST : EAST);
+    });
+    traffic.slice(0, 8).forEach((entry, index) => {
+      const westbound = index % 2 === 0;
+      const x = -36 + Math.floor(index / 2) * 11;
+      placeCar(entry, x, westbound ? LANE_NEAR : LANE_FAR, westbound ? WEST : EAST);
+    });
+    ctx.player.mesh.visible = true;
+    ctx.missions.overrideHUD('First Run: pick up the package at Bodega Luna', [{ x: -80, z: 69, label: 'Bodega Luna', type: 'pickup' }]);
+    ctx.cameraRig.pitch = 0.13;
+    ctx.cameraRig?.snap?.(0.1, 3.2);
+  }
+
+  function stage() {
+    if (!active) return false;
+    window.__shotReady = false;
+    staged = true;
+    ctx.shotMode = name;
+    ctx.startScreen.hidden = name !== 'start';
+    ctx.pauseScreen.hidden = true;
+    ctx.bustedScreen.hidden = true;
+    ctx.completeScreen.hidden = true;
+    ctx.briefingScreen.hidden = true;
+    ctx.player.car = null;
+    ctx.player.vehicle = null;
+    ctx.player.health = 100;
+    ctx.player.active = true;
+    ctx.player.mesh.visible = true;
+    if (name === 'start') {
+      ctx.hud.setVisible(false);
+      return true;
     }
-  }
-  return Infinity;
-}
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
-  }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
-}
+    const traffic = ctx.traffic.getCars();
+    const walkers = ctx.pedestrians.getPedestrians();
+    freezeCars();
+    if (name === 'cover') stageCover(traffic);
+    else if (name === 'chase') stageChase(traffic);
+    else if (name === 'foot') stageFoot(traffic, walkers);
 
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
+    ctx.hud.setVisible(true);
+    ctx.hud.toast(name === 'chase'
+      ? 'Solmar Bay Police · hold the line'
+      : name === 'foot' ? 'Courier route · Bodega Luna' : 'Package secured — the clock is running');
+    ctx.updateHud?.(0.2);
+    return true;
   }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
+
+  function markRendered() {
+    if (staged) window.__shotReady = true;
   }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+
+  return { name, seed, active, stage, markRendered, get rng() { return rng; } };
 }
