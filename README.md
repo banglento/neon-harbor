@@ -2,11 +2,11 @@
 
 Mara Velez knows every shortcut in Solmar Bay, a bright coastal city where an old friend’s “one last job” pulls her courier route into escalating trouble. Make the handoffs, outrun the harbor police, and earn enough cash and respect to choose what comes next in an original low-poly open-world crime story.
 
-![make.fun gta6-01](https://make.fun/badge/gta6-01.svg)
-![Neon Harbor rank](https://make.fun/badge/gta6-01/banglento/neon-harbor/rank.svg)
-![Neon Harbor reward](https://make.fun/badge/gta6-01/banglento/neon-harbor/reward.svg)
+[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![rank](https://make.fun/badge/gta6-01/banglento/neon-harbor/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![reward](https://make.fun/badge/gta6-01/banglento/neon-harbor/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-Competition: https://make.fun/c/gta6-01
+Competition: https://make.fun/bounty/gta6-01
 
 Features
 
