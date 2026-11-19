@@ -265,11 +265,13 @@ function buildCar(opts, rng, spawnIndex) {
 
   if (model.style === 'pickup') {
     // Cab block plus an open bed with rails.
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(W * 0.9, cabinHeight, L * 0.4), bodyMat);
-    cab.position.set(0, 0.28 + H * 0.42 + cabinHeight / 2 - 0.1, (L * cabinFront + L * cabinBack) / 2 + L * 0.06);
+    const cabLen = (L / 2) * (cabinFront - cabinBack);
+    const cabZ = (L / 2) * (cabinFront + cabinBack) / 2;
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(W * 0.9, cabinHeight, cabLen), bodyMat);
+    cab.position.set(0, 0.28 + H * 0.42 + cabinHeight / 2 - 0.1, cabZ);
     cab.castShadow = true;
     group.add(cab);
-    const glass = new THREE.Mesh(new THREE.BoxGeometry(W * 0.82, cabinHeight * 0.62, L * 0.4 + 0.02), glassMat);
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(W * 0.82, cabinHeight * 0.62, cabLen + 0.02), glassMat);
     glass.position.copy(cab.position).setY(cab.position.y + cabinHeight * 0.08);
     group.add(glass);
 
@@ -295,11 +297,13 @@ function buildCar(opts, rng, spawnIndex) {
     group.add(tub);
     const cageMat = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.5, metalness: 0.7 });
     const cageGeo = new THREE.CylinderGeometry(0.06, 0.06, cabinHeight, 5);
+    const cageFrontZ = (L / 2) * cabinFront * 0.7;
+    const cageBackZ = (L / 2) * cabinBack * 0.7;
     const cagePositions = [
-      [W * 0.4, cabinFront * L * 0.7],
-      [-W * 0.4, cabinFront * L * 0.7],
-      [W * 0.4, cabinBack * L * 0.7],
-      [-W * 0.4, cabinBack * L * 0.7],
+      [W * 0.4, cageFrontZ],
+      [-W * 0.4, cageFrontZ],
+      [W * 0.4, cageBackZ],
+      [-W * 0.4, cageBackZ],
     ];
     for (const [cx, cz] of cagePositions) {
       const post = new THREE.Mesh(cageGeo, cageMat);
@@ -307,13 +311,13 @@ function buildCar(opts, rng, spawnIndex) {
       group.add(post);
     }
     const roofBar = new THREE.Mesh(new THREE.BoxGeometry(W * 0.84, 0.1, 0.1), cageMat);
-    roofBar.position.set(0, 0.28 + H * 0.5 + cabinHeight, 0);
+    roofBar.position.set(0, 0.28 + H * 0.5 + cabinHeight, (cageFrontZ + cageBackZ) / 2);
     group.add(roofBar);
   } else {
     // Closed cabin: a trapezoid-ish block with a glass band. The taper and the
     // roofline change per style so a coupe does not read as a wagon.
-    const cabinLen = L * (cabinFront - cabinBack);
-    const cabinZ = (L * cabinFront + L * cabinBack) / 2;
+    const cabinLen = (L / 2) * (cabinFront - cabinBack);
+    const cabinZ = (L / 2) * (cabinFront + cabinBack) / 2;
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(W, cabinHeight, cabinLen), bodyMat);
     cabin.position.set(0, 0.28 + H * 0.42 + cabinHeight / 2, cabinZ);
     cabin.castShadow = true;
@@ -331,9 +335,16 @@ function buildCar(opts, rng, spawnIndex) {
     // Style-specific silhouette work.
     if (model.style === 'coupe' || model.style === 'muscle') {
       // Fastback: a sloped rear deck closing the roof to the tail.
-      const slope = new THREE.Mesh(new THREE.BoxGeometry(W * 0.9, 0.1, cabinLen * 0.7), bodyMat);
-      slope.position.set(0, cabin.position.y + cabinHeight * 0.22, cabinZ - cabinLen * 0.62);
-      slope.rotation.x = -0.34;
+      const deckY = 0.28 + H * 0.42;
+      const roofY = deckY + cabinHeight;
+      const roofRearZ = cabinZ - cabinLen * 0.92 / 2;
+      const tailZ = -L * 0.48;
+      const run = roofRearZ - tailZ;
+      const rise = roofY - deckY;
+      const slopeLength = Math.hypot(run, rise);
+      const slope = new THREE.Mesh(new THREE.BoxGeometry(W * 0.9, 0.1, slopeLength), bodyMat);
+      slope.position.set(0, (roofY + deckY) / 2, (roofRearZ + tailZ) / 2);
+      slope.rotation.x = -Math.atan2(rise, run);
       slope.castShadow = true;
       group.add(slope);
     }

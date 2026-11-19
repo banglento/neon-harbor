@@ -12,7 +12,7 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
@@ -26,9 +26,20 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 console.log(`${GAME_TITLE}: Solmar Bay open-world entry — hand-in build`);
 
+if (!existsSync(join(here, 'screenshots'))) throw new Error('screenshots/ is missing beside main.ts: this entry cannot be handed in without its screenshots');
+const screenshotFiles = readdirSync(join(here, 'screenshots'));
+if (screenshotFiles.length < 1 || screenshotFiles.length > 4) {
+  throw new Error(`screenshots/ must contain 1-4 files; found ${screenshotFiles.length}`);
+}
+for (const file of screenshotFiles) {
+  const path = join(here, 'screenshots', file);
+  const stat = statSync(path);
+  if (!stat.isFile()) throw new Error(`screenshots/${file} is not a file`);
+  if (stat.size > 262144) throw new Error(`screenshots/${file} is ${stat.size} bytes; maximum is 262144`);
+}
+
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
-if (!existsSync(join(here, 'screenshots'))) throw new Error('screenshots/ is missing beside main.ts: this entry cannot be handed in without its screenshots');
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 

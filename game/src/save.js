@@ -15,8 +15,8 @@
 // JSON blob or a save whose numbers are not finite is treated as "no save"
 // rather than crashing the boot.
 
-import { SAVE_KEY, GAME_TITLE } from './config.js';
-import { clamp } from './util.js';
+import { SAVE_KEY, GAME_TITLE, CITY } from './config.js';
+import { clamp, wrapAngle } from './util.js';
 
 export const SAVE_VERSION = 1;
 
@@ -113,9 +113,9 @@ export function createSave(ctx) {
       sideDeliveries: Math.max(0, Math.round(Number(parsed.sideDeliveries) || 0)),
       wanted: clamp(Math.round(Number(parsed.wanted) || 0), 0, 5),
       player: {
-        x: Number.isFinite(player?.x) ? player.x : null,
-        z: Number.isFinite(player?.z) ? player.z : null,
-        heading: Number.isFinite(player?.heading) ? player.heading : 0,
+        x: Number.isFinite(player?.x) ? clamp(player.x, -CITY.halfX - 140, CITY.halfX + 140) : null,
+        z: Number.isFinite(player?.z) ? clamp(player.z, -CITY.halfZ - 140, CITY.halfZ + 140) : null,
+        heading: Number.isFinite(player?.heading) ? wrapAngle(player.heading) : 0,
         inCar: Boolean(player?.inCar),
       },
     };
